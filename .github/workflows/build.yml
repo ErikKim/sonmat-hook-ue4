@@ -1,0 +1,48 @@
+# dshaptics_ue4.dll: every push builds it (artifact); a tag v* also puts the zip on a release, which is where the app fetches
+# it from (sonmat-games/parts.json: the zip's address + SHA-256, then sonmat tools/partfetch.py).
+name: build
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: MinHook (pinned)
+        shell: pwsh
+        run: |
+          git init -q minhook
+          git -C minhook fetch -q --depth 1 https://github.com/TsudaKageyu/minhook.git 8af6b4acae5a9388fd742b56fa79ece89d96f823
+          git -C minhook checkout -q FETCH_HEAD
+      - name: Build
+        shell: pwsh
+        run: |
+          cmd /c "build.bat dshaptics_ue4"; if ($LASTEXITCODE -ne 0 -or -not (Test-Path dshaptics_ue4.dll)) { throw "dshaptics_ue4.dll did not build" }
+      - name: Zip
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force pack | Out-Null
+          Copy-Item dshaptics_ue4.dll, LICENSE pack/
+          $v = if ("${{ github.ref }}" -like "refs/tags/v*") { "${{ github.ref_name }}".Substring(1) } else { "dev" }
+          Compress-Archive -Path pack/* -DestinationPath "sonmat-hook-ue4-$v.zip" -Force
+          "zip: sonmat-hook-ue4-$v.zip sha256 $((Get-FileHash "sonmat-hook-ue4-$v.zip" -Algorithm SHA256).Hash.ToLower())"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sonmat-hook-ue4
+          path: sonmat-hook-ue4-*.zip
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $z = Get-Item sonmat-hook-ue4-*.zip
+          $hash = (Get-FileHash $z -Algorithm SHA256).Hash.ToLower()
+          gh release create "${{ github.ref_name }}" $z.FullName --title "sonmat-hook-ue4 ${{ github.ref_name }}" --notes "SHA-256 $hash (the value for sonmat-games/parts.json)"

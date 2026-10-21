@@ -1,0 +1,10 @@
+*.dll
+*.obj
+*.exp
+*.lib
+*.zip
+minhook/
+pack/
+bin/
+obj/
+out/
