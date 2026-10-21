@@ -9,3 +9,5 @@ The app does not carry this in its installer for good: it fetches the release zi
 players when a new tag has been released and `parts.json` points at it.
 
 Build: Visual Studio C++ tools (x64), MinHook in minhook\ at the commit the workflow pins: build.bat dshaptics_ue4. Every push to main builds it on GitHub (artifact); a tag `v*` makes the release.
+
+MinHook (Tsuda Kageyu, BSD 2-Clause) is compiled in; its license is in the release zip as `MinHook-LICENSE.txt`.

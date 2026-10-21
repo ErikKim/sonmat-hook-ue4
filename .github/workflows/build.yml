@@ -29,7 +29,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force pack | Out-Null
-          Copy-Item dshaptics_ue4.dll, LICENSE pack/
+          Copy-Item dshaptics_ue4.dll, LICENSE pack/; Copy-Item minhook/LICENSE.txt pack/MinHook-LICENSE.txt
           $v = if ("${{ github.ref }}" -like "refs/tags/v*") { "${{ github.ref_name }}".Substring(1) } else { "dev" }
           Compress-Archive -Path pack/* -DestinationPath "sonmat-hook-ue4-$v.zip" -Force
           "zip: sonmat-hook-ue4-$v.zip sha256 $((Get-FileHash "sonmat-hook-ue4-$v.zip" -Algorithm SHA256).Hash.ToLower())"
