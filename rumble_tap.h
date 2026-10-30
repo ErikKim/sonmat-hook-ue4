@@ -13,7 +13,10 @@
 // (USB layout: byte 3 = small/right motor, 4 = big/left motor, 11-21 = R2 effect, 22-32 = L2 effect, 45-47 = light).
 // WriteFile is hooked for this, so only short writes that start with 0x02 are looked at, and only handles
 // that HidD_GetAttributes says are a Sony pad (asked once per handle).
-// The game's own call is passed on untouched. MinHook must already be initialised: call start() after it.
+// The XInput call is logged as asked and then passed on with both motors at 0: Sonmat's haptics replace the
+// original, so the game's vibration option can stay on (for this log, for videos) without the old rumble
+// shaking the pad on top (10-31 사용자). The DualSense writes above are passed on untouched (the game's own
+// trigger effects and light). MinHook must already be initialised: call start() after it.
 #pragma once
 #include <windows.h>
 #include <cstdio>
@@ -59,7 +62,11 @@ static void seen(DWORD pad, const Vib* v) {
     if (changed) { char b[64]; snprintf(b, sizeof b, "xr:%lu:%u:%u", pad, v->left, v->right); write(b); }
 }
 
-template <int I> static DWORD WINAPI hook(DWORD pad, Vib* v) { seen(pad, v); return g_orig[I](pad, v); }
+template <int I> static DWORD WINAPI hook(DWORD pad, Vib* v) {
+    seen(pad, v);
+    Vib still = {0, 0};
+    return g_orig[I](pad, v ? &still : v);              // logged, not felt (the header)
+}
 static const SetState_t kHooks[N] = {hook<0>, hook<1>, hook<2>, hook<3>, hook<4>};
 
 // ---- a DualSense driven directly: output reports written to the pad's HID handle
