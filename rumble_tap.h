@@ -15,7 +15,9 @@
 // that HidD_GetAttributes says are a Sony pad (asked once per handle).
 // The XInput call is logged as asked and then passed on with both motors at 0: Sonmat's haptics replace the
 // original, so the game's vibration option can stay on (for this log, for videos) without the old rumble
-// shaking the pad on top (10-31 사용자). The DualSense writes above are passed on untouched (the game's own
+// shaking the pad on top (10-31 사용자). The player can have the original back per game (the app's
+// "원래 게임 진동" switch, 11-01): the app puts <dir>\rumble_on_<exe> there, and while it is there the call goes
+// on as asked (looked at once a second). The DualSense writes above are passed on untouched (the game's own
 // trigger effects and light). MinHook must already be initialised: call start() after it.
 #pragma once
 #include <windows.h>
@@ -35,6 +37,7 @@ static HANDLE g_file = INVALID_HANDLE_VALUE;
 static CRITICAL_SECTION g_cs;
 static bool g_ready = false;
 static DWORD g_last[8];
+static std::string g_flag;                                   // <dir>rumble_on_<exe>: there = the original goes to the pad
 
 using WriteFile_t = BOOL (WINAPI*)(HANDLE, LPCVOID, DWORD, LPDWORD, LPOVERLAPPED);
 static WriteFile_t g_writeFile = nullptr;                    // the real one, once WriteFile is hooked
@@ -62,8 +65,16 @@ static void seen(DWORD pad, const Vib* v) {
     if (changed) { char b[64]; snprintf(b, sizeof b, "xr:%lu:%u:%u", pad, v->left, v->right); write(b); }
 }
 
+static bool passing() {
+    static ULONGLONG at = 0; static bool on = false;
+    ULONGLONG t = GetTickCount64();
+    if (t - at > 1000) { at = t; on = GetFileAttributesA(g_flag.c_str()) != INVALID_FILE_ATTRIBUTES; }
+    return on;
+}
+
 template <int I> static DWORD WINAPI hook(DWORD pad, Vib* v) {
     seen(pad, v);
+    if (passing()) return g_orig[I](pad, v);            // the player wants the game's own vibration
     Vib still = {0, 0};
     return g_orig[I](pad, v ? &still : v);              // logged, not felt (the header)
 }
@@ -157,6 +168,7 @@ static void start(const std::string& dir) {
     char exe[MAX_PATH]; GetModuleFileNameA(nullptr, exe, MAX_PATH);
     std::string name(exe); name = name.substr(name.find_last_of("\\/") + 1);
     auto dot = name.find_last_of('.'); if (dot != std::string::npos) name.resize(dot);
+    g_flag = dir + "rumble_on_" + name;
     g_file = CreateFileA((dir + "rumble_" + name + ".log").c_str(), FILE_APPEND_DATA,
                          FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_ALWAYS, 0, nullptr);
     g_ready = true;
