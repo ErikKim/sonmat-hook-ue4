@@ -17,8 +17,9 @@
 // original, so the game's vibration option can stay on (for this log, for videos) without the old rumble
 // shaking the pad on top (10-31 사용자). The player can have the original back per game (the app's
 // "원래 게임 진동" switch, 11-01): the app puts <dir>\rumble_on_<exe> there, and while it is there the call goes
-// on as asked (looked at once a second). The DualSense writes above are passed on untouched (the game's own
-// trigger effects and light). MinHook must already be initialised: call start() after it.
+// on as asked (looked at once a second). The DualSense writes above go on with their two motor bytes (3, 4) at 0
+// under the same switch (11-01: Lies of P's own rumble came through this way); the game's own trigger effects and
+// light stay as they are. MinHook must already be initialised: call start() after it.
 #pragma once
 #include <windows.h>
 #include <cstdio>
@@ -106,6 +107,9 @@ static bool is_pad(HANDLE h) {
     return pad;
 }
 
+static unsigned char g_still[16][128];                       // a ring: an overlapped write reads its buffer later
+static unsigned g_nextStill = 0;
+
 static BOOL WINAPI hk_WriteFile(HANDLE h, LPCVOID buf, DWORD n, LPDWORD written, LPOVERLAPPED ov) {
     if (buf && n >= 32 && n <= 128 && *(const unsigned char*)buf == 0x02 && h != g_file && is_pad(h)) {
         const unsigned char* p = (const unsigned char*)buf;
@@ -119,6 +123,14 @@ static BOOL WINAPI hk_WriteFile(HANDLE h, LPCVOID buf, DWORD n, LPDWORD written,
             char line[8 + 2 * 48]; int k = snprintf(line, sizeof line, "ds:");
             for (DWORD i = 0; i < m; i++) k += snprintf(line + k, sizeof line - k, "%02x", p[i]);
             write(line);
+        }
+        const unsigned char* q = (const unsigned char*)buf;
+        if ((q[3] || q[4]) && !passing()) {                  // the motors held back like the XInput call; the rest as written
+            EnterCriticalSection(&g_cs);
+            unsigned char* still = g_still[g_nextStill++ % 16];
+            LeaveCriticalSection(&g_cs);
+            memcpy(still, q, n); still[3] = still[4] = 0;
+            return g_writeFile(h, still, n, written, ov);
         }
     }
     return g_writeFile(h, buf, n, written, ov);
